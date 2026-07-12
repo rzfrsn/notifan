@@ -32,6 +32,9 @@ dependencies {
 	testCompileOnly("org.projectlombok:lombok")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	testAnnotationProcessor("org.projectlombok:lombok")
+
+    implementation(platform("org.springframework.cloud:spring-cloud-dependencies:2025.0.3"))
+    implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
 }
 
 tasks.withType<Test> {
