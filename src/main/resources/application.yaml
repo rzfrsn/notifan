@@ -1,3 +1,29 @@
 spring:
   application:
     name: notifan
+  datasource:
+    url: jdbc:postgresql://localhost:5433/notifan
+    username: notifan
+    password: notifan
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notifan-consumer
+      auto-offset-reset: earliest
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  mail:
+    host: localhost
+    port: 1025
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
