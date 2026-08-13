@@ -10,10 +10,19 @@ spring:
       ddl-auto: update
     show-sql: true
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: localhost:9092 # broker address — shared by both consumer AND producer (KafkaTemplate)
     consumer:
-      group-id: notifan-consumer
-      auto-offset-reset: earliest
+      group-id: notifan-consumer # the consumer group whose offset "bookmark" is going to be tracked
+      auto-offset-reset: earliest # if this group has no committed offset yet, start from the beginning of the topic, not just new messages
+      enable-auto-commit: false   # disable Kafka's raw timer-based auto-commit — we want Spring to commit only after the listener actually succeeds
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.notifan.notifan.event # security allowlist - refuses to deserialize into any class outside this package
+        spring.json.value.default.type: com.notifan.notifan.event.PlatformEvent  # static target type; @JsonTypeInfo then picks the real subtype from "eventType"
+        spring.json.use.type.headers: false # resolve type from the JSON body's "eventType" field, not a Spring-only Kafka header
+      listener:
+          ack-mode: RECORD  # commit the offset right after a listener call succeeds
   data:
     redis:
       host: localhost
