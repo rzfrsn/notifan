@@ -4,10 +4,10 @@ import com.notifan.notifan.event.CommentAddedEvent;
 import com.notifan.notifan.event.PlatformEvent;
 import com.notifan.notifan.event.PostLikedEvent;
 import com.notifan.notifan.event.UserFollowedEvent;
+import com.notifan.notifan.notification.CommentAddedEventHandler;
 import com.notifan.notifan.notification.PostLikedEventHandler;
 import com.notifan.notifan.notification.UserFollowedEventHandler;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -18,17 +18,17 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@Slf4j
 public class PlatformEventListener {
 
     private final PostLikedEventHandler postLikedEventHandler;
     private final UserFollowedEventHandler userFollowedEventHandler;
+    private final CommentAddedEventHandler commentAddedEventHandler;
 
     @KafkaListener(topics = "${application.platform-events-topic}")
     public void onEvent(PlatformEvent event) {
         switch (event) {
             case PostLikedEvent e -> postLikedEventHandler.handle(e);
-            case CommentAddedEvent e -> log.warn("COMMENT_ADDED handling not yet implemented, eventId={}", e.eventId());
+            case CommentAddedEvent e -> commentAddedEventHandler.handle(e);
             case UserFollowedEvent e -> userFollowedEventHandler.handle(e);
         }
     }
