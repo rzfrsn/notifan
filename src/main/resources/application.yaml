@@ -1,5 +1,8 @@
 application:
   platform-events-topic: platform-events
+  rate-limit:
+    max-requests: 10
+    window: 1m
 spring:
   application:
     name: notifan
