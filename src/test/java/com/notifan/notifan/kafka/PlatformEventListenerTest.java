@@ -3,6 +3,7 @@ package com.notifan.notifan.kafka;
 import com.notifan.notifan.notification.EventType;
 import com.notifan.notifan.notification.NotificationRepository;
 import com.notifan.notifan.config.ApplicationProperties;
+import com.notifan.notifan.notification.NotificationStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +51,6 @@ class PlatformEventListenerTest {
     @Test
     void consumesPostLikedEventAndPersistsNotification() {
         UUID recipientId = UUID.randomUUID();
-
         String topic = applicationProperties.getPlatformEventsTopic();
 
         // Deliberately raw JSON, matching what an external producer would actually send
@@ -83,7 +83,6 @@ class PlatformEventListenerTest {
     @Test
     void consumesUserFollowedEventAndPersistsNotification() {
         UUID recipientId = UUID.randomUUID();
-
         String topic = applicationProperties.getPlatformEventsTopic();
 
         String userFollowedEvent = """
@@ -112,13 +111,12 @@ class PlatformEventListenerTest {
     @Test
     void consumesCommentAddedEventAndPersistsNotifications() {
         UUID postId = UUID.randomUUID();
+        String topic = applicationProperties.getPlatformEventsTopic();
 
         List<UUID> recipientIds = List.of(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID());
         String recipientIdsJson = recipientIds.stream()
                 .map(id -> "\"" + id + "\"")
                 .collect(Collectors.joining(","));
-
-        String topic = applicationProperties.getPlatformEventsTopic();
 
         String commentAddedEvent = """
                 {
@@ -138,5 +136,36 @@ class PlatformEventListenerTest {
                 assertThat(notificationRepository.findByRecipientIdIn(recipientIds))
                         .hasSize(3)
                         .allMatch(n -> n.getEventType().equals(EventType.COMMENT_ADDED)));
+    }
+
+    /**
+     * Sends 11 POST_LIKED events for the same recipient (limit is 10/min) — confirms rate
+     * limiting actually applies through the real pipeline, not just in the limiter unit test.
+     */
+    @Test
+    void ratelimitsExcessPostLikedEvents() {
+        UUID recipientId = UUID.randomUUID();
+        String topic = applicationProperties.getPlatformEventsTopic();
+
+        for (int i = 0; i < 11; i++) {
+            String json = """
+                {
+                  "eventType": "POST_LIKED",
+                  "eventId": "%s",
+                  "actorId": "%s",
+                  "recipientId": "%s",
+                  "postId": "%s",
+                  "timestamp": "2026-08-11T10:00:00Z"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), recipientId, UUID.randomUUID());
+
+            kafkaTemplate.send(topic, recipientId.toString(), json);
+        }
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId)))
+                        .hasSize(11)
+                        .filteredOn(n -> n.getStatus() == NotificationStatus.RATE_LIMITED)
+                        .hasSize(1));
     }
 }

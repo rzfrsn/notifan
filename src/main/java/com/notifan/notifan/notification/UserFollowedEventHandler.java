@@ -1,6 +1,7 @@
 package com.notifan.notifan.notification;
 
 import com.notifan.notifan.event.UserFollowedEvent;
+import com.notifan.notifan.ratelimit.SlidingWindowRateLimiter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +14,13 @@ import org.springframework.stereotype.Service;
 public class UserFollowedEventHandler {
 
     private final NotificationRepository notificationRepository;
+    private final SlidingWindowRateLimiter rateLimiter;
 
     public void handle(UserFollowedEvent event) {
         var notification = new Notification(event.recipientId(), EventType.USER_FOLLOWED);
+        if(rateLimiter.isRateLimited(event.recipientId())) {
+            notification.setStatus(NotificationStatus.RATE_LIMITED);
+        }
         notificationRepository.save(notification);
     }
 }
