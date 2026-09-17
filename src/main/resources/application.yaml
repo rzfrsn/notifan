@@ -3,6 +3,8 @@ application:
   rate-limit:
     max-requests: 10
     window: 1m
+  event-deduplication:
+    cache-ttl: 24h # type Duration (ex: 1h, 5s, 400ms)
 spring:
   application:
     name: notifan
