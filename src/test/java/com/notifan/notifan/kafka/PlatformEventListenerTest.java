@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.test.context.TestPropertySource;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,6 +25,7 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest
 @EmbeddedKafka(partitions = 1, topics = "${application.platform-events-topic}")
+@TestPropertySource(properties = "application.event-deduplication.cache-ttl=5s")
 class PlatformEventListenerTest {
 
     @Autowired
@@ -166,6 +168,51 @@ class PlatformEventListenerTest {
                 assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId)))
                         .hasSize(11)
                         .filteredOn(n -> n.getStatus() == NotificationStatus.RATE_LIMITED)
+                        .hasSize(1));
+    }
+
+    /**
+     * Confirms two identical events produce only one notification, and that a resend after
+     * TTL expiry is treated as new again.
+     */
+    @Test
+    void deduplicatesEvents() throws InterruptedException {
+        UUID recipientId = UUID.randomUUID();
+        String topic = applicationProperties.getPlatformEventsTopic();
+
+        String json = """
+                {
+                  "eventType": "POST_LIKED",
+                  "eventId": "%s",
+                  "actorId": "%s",
+                  "recipientId": "%s",
+                  "postId": "%s",
+                  "timestamp": "2026-08-11T10:00:00Z"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), recipientId, UUID.randomUUID());
+
+        // Same message sent twice, second should be deduplicated.
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId)))
+                        .hasSize(1));
+
+        // Wipe the persisted notification, the dedup key in Redis is untouched.
+        notificationRepository.deleteAll();
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+
+        // Sleep, not await: proving nothing was created, not waiting for something to appear.
+        Thread.sleep(2_000);
+        assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId))).hasSize(0);
+
+        // Let the 5s TTL genuinely expire before resending, so this message is seen as new.
+        Thread.sleep(5_500);
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId)))
                         .hasSize(1));
     }
 }
