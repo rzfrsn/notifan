@@ -48,4 +48,8 @@ public class Notification {
     public void incrementRetryCount() {
         this.retryCount++;
     }
+
+    public boolean isRateLimited() {
+        return status == NotificationStatus.RATE_LIMITED;
+    }
 }

@@ -1,6 +1,7 @@
 package com.notifan.notifan.notification;
 
 import com.notifan.notifan.deduplication.EventDeduplicator;
+import com.notifan.notifan.delivery.NotificationDeliveryService;
 import com.notifan.notifan.event.CommentAddedEvent;
 import com.notifan.notifan.ratelimit.SlidingWindowRateLimiter;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class CommentAddedEventHandler {
     private final NotificationRepository notificationRepository;
     private final SlidingWindowRateLimiter rateLimiter;
     private final EventDeduplicator eventDeduplicator;
+    private final NotificationDeliveryService notificationDelivery;
 
     public void handle(CommentAddedEvent event) {
         if(eventDeduplicator.isDuplicated(event.eventId())) return;
@@ -34,6 +36,12 @@ public class CommentAddedEventHandler {
                     return notification;
                 })
                 .toList();
-        notificationRepository.saveAll(notifications);
+        List<Notification> newNotifications = notificationRepository.saveAll(notifications);
+
+        newNotifications.forEach(newNotification -> {
+            if(!newNotification.isRateLimited()) {
+                notificationDelivery.deliverAsync(newNotification);
+            }
+        });
     }
 }
