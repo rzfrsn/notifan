@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "application.rate-limit.max-requests=3",
         "application.rate-limit.window=5s"
 })
-public class SlidingWindowRateLimiterTest {
+class SlidingWindowRateLimiterTest {
 
     @Autowired
     private SlidingWindowRateLimiter rateLimiter;

@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 @TestPropertySource(properties = "application.event-deduplication.cache-ttl=500ms")
-public class EventDeduplicatorTest {
+class EventDeduplicatorTest {
 
     @Autowired
     private EventDeduplicator eventDeduplicator;
