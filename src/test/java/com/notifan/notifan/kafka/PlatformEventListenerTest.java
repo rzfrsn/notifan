@@ -1,5 +1,6 @@
 package com.notifan.notifan.kafka;
 
+import com.notifan.notifan.delivery.MailingService;
 import com.notifan.notifan.notification.EventType;
 import com.notifan.notifan.notification.NotificationRepository;
 import com.notifan.notifan.config.ApplicationProperties;
@@ -10,7 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.mail.MailSendException;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.Duration;
 import java.util.List;
@@ -19,9 +22,13 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 
 /**
  * Integration tests for the platform event Kafka consumer, run against a real embedded broker.
+ * MailingService is mocked (@MockitoBean) so delivery tests don't depend on real Mailpit —
+ * every other dependency here (Kafka, Postgres, Redis) stays real.
  */
 @SpringBootTest
 @EmbeddedKafka(partitions = 1, topics = "${application.platform-events-topic}")
@@ -36,6 +43,9 @@ class PlatformEventListenerTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @MockitoBean
+    private MailingService mailingService;
 
     /**
      * Cleans up rows persisted by the async Kafka listener - writes happen on a separate
@@ -214,5 +224,63 @@ class PlatformEventListenerTest {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(notificationRepository.findByRecipientIdIn(List.of(recipientId)))
                         .hasSize(1));
+    }
+
+    /**
+     * Sends a real POST_LIKED event through Kafka and confirms delivery completes end to end —
+     * status ends up SENT, not just PENDING or RATE_LIMITED.
+     */
+    @Test
+    void deliverNotifications() {
+        var recipientId = UUID.randomUUID();
+        String topic = applicationProperties.getPlatformEventsTopic();
+
+        String json = """
+                {
+                  "eventType": "POST_LIKED",
+                  "eventId": "%s",
+                  "actorId": "%s",
+                  "recipientId": "%s",
+                  "postId": "%s",
+                  "timestamp": "2026-08-11T10:00:00Z"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), recipientId, UUID.randomUUID());
+
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(notificationRepository.findAll())
+                        .hasSize(1)
+                        .allMatch(n -> n.getStatus().equals(NotificationStatus.SENT)));
+    }
+
+    /**
+     * Same pipeline, but mailingService throws — confirms the failure path also completes end
+     * to end, landing on FAILED rather than stalling at PENDING.
+     */
+    @Test
+    void deliversFailedNotificationOnMailingFailure() {
+        var recipientId = UUID.randomUUID();
+        String topic = applicationProperties.getPlatformEventsTopic();
+
+        doThrow(new MailSendException("Simulated failure")).when(mailingService).send(any());
+
+        String json = """
+            {
+              "eventType": "POST_LIKED",
+              "eventId": "%s",
+              "actorId": "%s",
+              "recipientId": "%s",
+              "postId": "%s",
+              "timestamp": "2026-08-11T10:00:00Z"
+            }
+            """.formatted(UUID.randomUUID(), UUID.randomUUID(), recipientId, UUID.randomUUID());
+
+        kafkaTemplate.send(topic, recipientId.toString(), json);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(notificationRepository.findAll())
+                        .hasSize(1)
+                        .allMatch(n -> n.getStatus().equals(NotificationStatus.FAILED)));
     }
 }
