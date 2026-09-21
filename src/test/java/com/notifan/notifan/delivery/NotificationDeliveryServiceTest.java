@@ -18,6 +18,12 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
+/**
+ * Basic delivery contract: success sets SENT, one failure sets FAILED. Uses a mocked
+ * MailingService — real circuit-breaker state transitions are covered separately in
+ * {@link NotificationDeliveryCircuitBreakerTest}, since mocking the whole class here would
+ * replace the real Resilience4j proxy along with it.
+ */
 @SpringBootTest
 public class NotificationDeliveryServiceTest {
 
@@ -30,22 +36,26 @@ public class NotificationDeliveryServiceTest {
     @MockitoBean
     private MailingService mailingService;
 
+    /**
+     * Mailing succeeds — confirms the notification ends up SENT.
+     */
     @Test
     void deliverNotificationSuccessfully() {
         var savedNotification = notificationRepository.save(new Notification(UUID.randomUUID(), EventType.POST_LIKED));
 
         notificationDeliveryService.deliverAsync(savedNotification);
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
             assertThat(notificationRepository.findById(savedNotification.getId()))
                     .isPresent()
                     .get()
                     .extracting(Notification::getStatus)
-                    .isEqualTo(NotificationStatus.SENT);
-
-        });
+                    .isEqualTo(NotificationStatus.SENT));
     }
 
+    /**
+     * Mailing throws once — confirms the fallback runs and sets the notification FAILED.
+     */
     @Test
     void deliverNotificationFailed() {
         var savedNotification = notificationRepository.save(new Notification(UUID.randomUUID(), EventType.POST_LIKED));
@@ -53,12 +63,11 @@ public class NotificationDeliveryServiceTest {
 
         notificationDeliveryService.deliverAsync(savedNotification);
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
             assertThat(notificationRepository.findById(savedNotification.getId()))
                     .isPresent()
                     .get()
                     .extracting(Notification::getStatus)
-                    .isEqualTo(NotificationStatus.FAILED);
-        });
+                    .isEqualTo(NotificationStatus.FAILED));
     }
 }

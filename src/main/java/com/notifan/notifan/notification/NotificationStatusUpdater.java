@@ -4,6 +4,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+/**
+ * Owns the SENT/FAILED status transition after a delivery attempt
+ */
 @Service
 @RequiredArgsConstructor
 public class NotificationStatusUpdater {

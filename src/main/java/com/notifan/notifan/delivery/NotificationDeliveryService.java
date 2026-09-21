@@ -6,6 +6,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/**
+ * Entry point handlers call after persisting a Notification. Runs delivery off the Kafka
+ * consumer thread, so a slow or failing mail service can't block partition throughput.
+ */
 @Service
 @RequiredArgsConstructor
 public class NotificationDeliveryService {

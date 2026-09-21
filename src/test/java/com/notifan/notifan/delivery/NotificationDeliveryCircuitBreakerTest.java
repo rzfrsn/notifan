@@ -26,6 +26,12 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+/**
+ * Proves the sendEmail circuit breaker's full state machine — closed to open on repeated
+ * failures, open rejects calls without invoking MailingService, half-open closes on a
+ * mostly-successful trial or reopens on a mostly-failed one. wait-duration-in-open-state
+ * is overridden from the real config (30s) down to 2s so this stays fast.
+ */
 @SpringBootTest
 @TestPropertySource(properties = "resilience4j.circuitbreaker.instances.sendEmail.wait-duration-in-open-state=2s")
 class NotificationDeliveryCircuitBreakerTest {
@@ -43,13 +49,19 @@ class NotificationDeliveryCircuitBreakerTest {
 
     private CircuitBreaker circuitBreaker;
 
+    /**
+     * Resets the circuit to CLOSED before each test — state persists across tests otherwise,
+     *  since the registry is a shared Spring bean.
+     */
     @BeforeEach
     void setUp() {
         circuitBreaker = circuitBreakerRegistry.circuitBreaker("sendEmail");
         circuitBreaker.reset();
     }
 
-    /** Sends one notification, waits until its status is no longer PENDING, and returns it. */
+    /**
+     * Sends one notification, waits until its status is no longer PENDING, and returns it.
+     */
     private Notification sendAndAwaitResolution(boolean shouldSucceed) {
         if (shouldSucceed) {
             doNothing().when(mailingService).send(any());
@@ -69,6 +81,10 @@ class NotificationDeliveryCircuitBreakerTest {
         return notification;
     }
 
+    /**
+     * 5 successes then 5 failures (50% over a 10-call window) opens the circuit. Confirms the
+     * next call is rejected outright — MailingService never invoked — not just that it fails.
+     */
     @Test
     void opensCircuitAfterFailureThresholdAndRejectsSubsequentCalls() {
         for (int i = 0; i < 5; i++) sendAndAwaitResolution(true);
@@ -89,6 +105,9 @@ class NotificationDeliveryCircuitBreakerTest {
         verify(mailingService, never()).send(any());
     }
 
+    /**
+     * Once open, 3 permitted half-open trial calls that all succeed should close the circuit.
+     */
     @Test
     void closesCircuitWhenHalfOpenTrialMostlySucceeds() throws InterruptedException {
         for (int i = 0; i < 5; i++) sendAndAwaitResolution(true);
@@ -102,7 +121,10 @@ class NotificationDeliveryCircuitBreakerTest {
 
         assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
-
+    /**
+     * Once open, a half-open trial where 2/3 calls fail (over the 50% threshold) should
+     *  reopen the circuit rather than close it.
+     *  */
     @Test
     void reopensCircuitWhenHalfOpenTrialMostlyFails() throws InterruptedException {
         for (int i = 0; i < 5; i++) sendAndAwaitResolution(true);

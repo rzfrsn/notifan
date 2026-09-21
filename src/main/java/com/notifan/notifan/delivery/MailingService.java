@@ -8,6 +8,11 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+/**
+ * Composes and sends a notification email via SMTP (Mailpit locally, SES in prod). Deliberately
+ * unaware of resilience or persistence — {@link NotificationEmailSender} owns the circuit
+ * breaker, and letting MailException propagate uncaught is what allows that to work.
+ */
 @Service
 @RequiredArgsConstructor
 public class MailingService {
