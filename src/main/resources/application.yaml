@@ -37,6 +37,14 @@ spring:
   mail:
     host: localhost
     port: 1025
+resilience4j:
+  circuitbreaker:
+    instances:
+      sendEmail:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
 
 management:
   endpoints:
