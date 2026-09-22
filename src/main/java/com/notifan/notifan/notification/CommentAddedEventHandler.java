@@ -1,13 +1,16 @@
 package com.notifan.notifan.notification;
 
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
 import com.notifan.notifan.deduplication.EventDeduplicator;
 import com.notifan.notifan.delivery.NotificationDeliveryService;
 import com.notifan.notifan.event.CommentAddedEvent;
+import com.notifan.notifan.metrics.NotificationMetrics;
 import com.notifan.notifan.ratelimit.SlidingWindowRateLimiter;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
-import java.util.List;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Persists one pending {@link Notification} per recipient in a {@link CommentAddedEvent} — the
@@ -23,14 +26,15 @@ public class CommentAddedEventHandler {
     private final SlidingWindowRateLimiter rateLimiter;
     private final EventDeduplicator eventDeduplicator;
     private final NotificationDeliveryService notificationDelivery;
+    private final NotificationMetrics notificationMetrics;
 
     public void handle(CommentAddedEvent event) {
-        if(eventDeduplicator.isDuplicated(event.eventId())) return;
+        if (eventDeduplicator.isDuplicated(event.eventId())) return;
 
         List<Notification> notifications = event.recipientIds().stream()
                 .map(recipientId -> {
                     var notification = new Notification(recipientId, EventType.COMMENT_ADDED);
-                    if(rateLimiter.isRateLimited(notification.getRecipientId())) {
+                    if (rateLimiter.isRateLimited(notification.getRecipientId())) {
                         notification.setStatus(NotificationStatus.RATE_LIMITED);
                     }
                     return notification;
@@ -39,7 +43,9 @@ public class CommentAddedEventHandler {
         List<Notification> newNotifications = notificationRepository.saveAll(notifications);
 
         newNotifications.forEach(newNotification -> {
-            if(!newNotification.isRateLimited()) {
+            if (!newNotification.isRateLimited()) {
+                notificationMetrics.record(newNotification.getStatus());
+            } else {
                 notificationDelivery.deliverAsync(newNotification);
             }
         });

@@ -1,11 +1,14 @@
 package com.notifan.notifan.notification;
 
+import org.springframework.stereotype.Service;
+
 import com.notifan.notifan.deduplication.EventDeduplicator;
 import com.notifan.notifan.delivery.NotificationDeliveryService;
 import com.notifan.notifan.event.PostLikedEvent;
+import com.notifan.notifan.metrics.NotificationMetrics;
 import com.notifan.notifan.ratelimit.SlidingWindowRateLimiter;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
 /**
  * Persists a pending {@link Notification} for the post's author.
@@ -19,17 +22,20 @@ public class PostLikedEventHandler {
     private final SlidingWindowRateLimiter rateLimiter;
     private final EventDeduplicator eventDeduplicator;
     private final NotificationDeliveryService notificationDelivery;
+    private final NotificationMetrics notificationMetrics;
 
     public void handle(PostLikedEvent event) {
-        if(eventDeduplicator.isDuplicated(event.eventId())) return;
+        if (eventDeduplicator.isDuplicated(event.eventId())) return;
 
         var notification = new Notification(event.recipientId(), EventType.POST_LIKED);
-        if(rateLimiter.isRateLimited(event.recipientId())) {
+        if (rateLimiter.isRateLimited(event.recipientId())) {
             notification.setStatus(NotificationStatus.RATE_LIMITED);
         }
         var newNotification = notificationRepository.save(notification);
 
-        if(!newNotification.isRateLimited()) {
+        if (newNotification.isRateLimited()) {
+            notificationMetrics.record(newNotification.getStatus());
+        } else {
             notificationDelivery.deliverAsync(newNotification);
         }
     }

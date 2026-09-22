@@ -1,8 +1,11 @@
 package com.notifan.notifan.notification;
 
+import org.springframework.stereotype.Service;
+
+import com.notifan.notifan.metrics.NotificationMetrics;
+
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
 /**
  * Owns the SENT/FAILED status transition after a delivery attempt
@@ -12,9 +15,13 @@ import org.springframework.stereotype.Service;
 public class NotificationStatusUpdater {
 
     private final NotificationRepository notificationRepository;
+    private final NotificationMetrics notificationMetrics;
 
     public void markDelivered(@NonNull Notification notification, boolean isDelivered) {
+        var status = isDelivered ? NotificationStatus.SENT : NotificationStatus.FAILED;
         notification.setStatus(isDelivered ? NotificationStatus.SENT : NotificationStatus.FAILED);
         notificationRepository.save(notification);
+
+        notificationMetrics.record(status);
     }
 }
