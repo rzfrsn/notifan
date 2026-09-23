@@ -25,7 +25,7 @@ services:
     image: postgres:18-alpine
     container_name: notifan-postgres
     ports:
-      - "5433:5432"    # 5432 is already used in my local environment
+      - "5433:5432" # 5432 is already used in my local environment
     environment:
       POSTGRES_DB: notifan
       POSTGRES_USER: notifan
@@ -43,8 +43,8 @@ services:
     image: axllent/mailpit
     container_name: notifan-mailhog
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
 
   prometheus:
     image: prom/prometheus:latest
@@ -65,6 +65,9 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     depends_on:
       - prometheus
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
 
 volumes:
   kafka-data:
