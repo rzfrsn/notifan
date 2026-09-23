@@ -36,6 +36,7 @@ dependencies {
 	testAnnotationProcessor("org.projectlombok:lombok")
 
     implementation("io.github.resilience4j:resilience4j-spring-boot3:2.3.0")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 }
 
 tasks.withType<Test> {
