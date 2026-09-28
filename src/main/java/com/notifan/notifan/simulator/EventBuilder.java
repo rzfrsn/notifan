@@ -13,8 +13,13 @@ import com.notifan.notifan.notification.EventType;
 
 public class EventBuilder {
 
+  // JavaTimeModule required to serialize Instant fields correctly
   private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
+  /**
+   * Builds the JSON payload for the given event type.
+   * Note: for COMMENT_ADDED, recipientId is ignored (fan-out to all TestUsers).
+   */
   public static String generate(EventType type, UUID actorId, UUID recipientId) {
     try {
       return switch (type) {
@@ -35,13 +40,20 @@ public class EventBuilder {
     return new UserFollowedEvent(UUID.randomUUID(), actorId, recipientId, Instant.now());
   }
 
-  /** Fan-out demo: recipientId is ignored here — targets every TestUser except the actor. */
+  /**
+   * Fan-out demo: recipientId is ignored here — targets every TestUser except the actor.
+   */
   private static CommentAddedEvent createCommentAddedEvent(UUID actorId) {
     List<UUID> recipientIds = TestUsers.TEST_USERS.stream()
         .map(TestUser::id)
         .filter(id -> !id.equals(actorId))
         .toList();
-    return new CommentAddedEvent(UUID.randomUUID(), actorId, UUID.randomUUID(), UUID.randomUUID(), recipientIds,
+    return new CommentAddedEvent(
+        UUID.randomUUID(),
+        actorId,
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        recipientIds,
         Instant.now());
   }
 }
