@@ -43,7 +43,7 @@ public class CommentAddedEventHandler {
         List<Notification> newNotifications = notificationRepository.saveAll(notifications);
 
         newNotifications.forEach(newNotification -> {
-            if (!newNotification.isRateLimited()) {
+            if (newNotification.isRateLimited()) {
                 notificationMetrics.record(newNotification.getStatus());
             } else {
                 notificationDelivery.deliverAsync(newNotification);
